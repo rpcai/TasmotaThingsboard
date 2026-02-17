@@ -103,6 +103,18 @@ char* GetTopic_P(char *stopic, uint32_t prefix, const char *topic, const char* s
   char romram[CMDSZ];
   String fulltopic;
 
+  // ThingsBoard mode: flat topic structure (no subtopics)
+  if (Settings->flag6.mqtt_thingsboard_mode) {
+    prefix &= 3;  // Normalize prefix to 0-2 (CMND, STAT, TELE)
+    char stemp[11];
+    fulltopic = GetTextIndexed(stemp, sizeof(stemp), prefix, kPrefixes);
+    fulltopic += F("/");
+    fulltopic += (const __FlashStringHelper *)topic;
+    fulltopic += F("/");
+    snprintf_P(stopic, TOPSZ, PSTR("%s"), fulltopic.c_str());
+    return stopic;
+  }
+
   snprintf_P(romram, sizeof(romram), subtopic);
   if (TasmotaGlobal.fallback_topic_flag || (prefix > 3)) {
     bool fallback = (prefix < 8);

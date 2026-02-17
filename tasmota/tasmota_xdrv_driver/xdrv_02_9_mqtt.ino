@@ -47,7 +47,7 @@ WiFiClient EspClient;                     // Wifi Client - non-TLS
 const char kMqttCommands[] PROGMEM = "|"  // No prefix
 #ifndef FIRMWARE_MINIMAL
   // SetOption synonyms
-  D_SO_MQTTJSONONLY "|"
+  D_SO_MQTTJSONONLY "|" D_SO_MQTTTHINGSBOARD "|"
 #ifdef USE_MQTT_TLS
   D_SO_MQTTTLS "|" D_SO_MQTTTLS_FINGERPRINT "|"
 #endif
@@ -71,7 +71,7 @@ const char kMqttCommands[] PROGMEM = "|"  // No prefix
   ;
 
 SO_SYNONYMS(kMqttSynonyms,
-  90,
+  90, 166,
 #ifdef USE_MQTT_TLS
   103, 132,
 #endif
@@ -655,6 +655,34 @@ void MqttDataHandler(char* mqtt_topic, uint8_t* mqtt_data, unsigned int data_len
   XdrvMailbox.data = (char*)mqtt_data;
   if (XdrvCall(FUNC_MQTT_DATA)) { return; }
 
+  // ThingsBoard JSON command parsing
+  if (Settings->flag6.mqtt_thingsboard_mode) {
+    if (strstr(topic, "v1/devices/me/attributes") != nullptr) {
+      // Parse JSON payload: {"POWER":"ON", "Dimmer":50}
+      JsonParser parser((char*)mqtt_data);
+      JsonParserObject root = parser.getRootObject();
+
+      if (root) {
+        // Iterate through all key-value pairs in JSON
+        for (auto kv : root) {
+          const char* key = kv.getStr();
+          JsonParserToken value = kv.getValue();
+
+          // Build command topic for standard command handler
+          char command_topic[TOPSZ];
+          GetTopic_P(command_topic, CMND, TasmotaGlobal.mqtt_topic, key);
+
+          // Execute command with value from JSON
+          const char* value_str = value.getStr();
+          if (value_str) {
+            CommandHandler(command_topic, (char*)value_str, strlen(value_str));
+          }
+        }
+        return;  // Command handled, exit
+      }
+    }
+  }
+
   ShowSource(SRC_MQTT);
   TasmotaGlobal.last_source = SRC_MQTT;
 	
@@ -1038,7 +1066,8 @@ void MqttConnected(void) {
 
     GetTopic_P(stopic, CMND, TasmotaGlobal.mqtt_topic, PSTR("#"));
     MqttSubscribe(stopic);
-    if (strstr_P(SettingsText(SET_MQTT_FULLTOPIC), MQTT_TOKEN_TOPIC) != nullptr) {
+    if (strstr_P(SettingsText(SET_MQTT_FULLTOPIC), MQTT_TOKEN_TOPIC) != nullptr
+        && !Settings->flag6.mqtt_thingsboard_mode) {  // Disable group topics in ThingsBoard mode
       uint32_t real_index = SET_MQTT_GRP_TOPIC;
       for (uint32_t i = 0; i < MAX_GROUP_TOPICS; i++) {
         if (1 == i) { real_index = SET_MQTT_GRP_TOPIC2 -1; }
@@ -1049,6 +1078,15 @@ void MqttConnected(void) {
       }
       GetFallbackTopic_P(stopic, PSTR("#"));
       MqttSubscribe(stopic);
+    }
+
+    if (Settings->flag6.mqtt_thingsboard_mode) {
+      // Subscribe to ThingsBoard attributes topic for command processing
+      strlcpy(stopic, "v1/devices/me/attributes", sizeof(stopic));
+      MqttSubscribe(stopic);
+      AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_MQTT "ThingsBoard mode active, subscribed to attributes"));
+      // Auto-enable JSON-only messages (SetOption90)
+      Settings->flag4.only_json_message = 1;
     }
 
     XdrvCall(FUNC_MQTT_SUBSCRIBE);
