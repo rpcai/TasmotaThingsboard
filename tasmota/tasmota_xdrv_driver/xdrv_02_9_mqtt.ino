@@ -668,9 +668,12 @@ void MqttDataHandler(char* mqtt_topic, uint8_t* mqtt_data, unsigned int data_len
           const char* key = kv.getStr();
           JsonParserToken value = kv.getValue();
 
-          // Build command topic for standard command handler
+          // Build command topic in standard format (not flat) for CommandHandler
+          // CommandHandler needs the command name in the topic path: cmnd/tasmota/Power
           char command_topic[TOPSZ];
-          GetTopic_P(command_topic, CMND, TasmotaGlobal.mqtt_topic, key);
+          char prefix[TOPSZ];
+          GetTopic_P(prefix, CMND, TasmotaGlobal.mqtt_topic, "");
+          snprintf_P(command_topic, sizeof(command_topic), PSTR("%s%s"), prefix, key);
 
           // Execute command with value from JSON
           const char* value_str = value.getStr();
@@ -1055,7 +1058,11 @@ void MqttConnected(void) {
     Mqtt.connect_count++;
 
     GetTopic_P(stopic, TELE, TasmotaGlobal.mqtt_topic, S_LWT);
-    Response_P(PSTR(MQTT_LWT_ONLINE));
+    if (Settings->flag6.mqtt_thingsboard_mode) {
+      Response_P(PSTR("{\"" D_JSON_STATUS "\":\"Online\"}"));
+    } else {
+      Response_P(PSTR(MQTT_LWT_ONLINE));
+    }
     MqttPublish(stopic, true);
 
     if (!Settings->flag4.only_json_message) {  // SetOption90 - Disable non-json MQTT response
@@ -1278,7 +1285,11 @@ void MqttReconnect(void) {
 
   char stopic[TOPSZ];
   GetTopic_P(stopic, TELE, TasmotaGlobal.mqtt_topic, S_LWT);
-  Response_P(S_LWT_OFFLINE);
+  if (Settings->flag6.mqtt_thingsboard_mode) {
+    Response_P(PSTR("{\"" D_JSON_STATUS "\":\"Offline\"}"));
+  } else {
+    Response_P(S_LWT_OFFLINE);
+  }
   if (MqttClient.connect(TasmotaGlobal.mqtt_client,
                          mqtt_user,
                          mqtt_pwd,

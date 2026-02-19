@@ -44,28 +44,59 @@ Tasmota parses the JSON, extracts each command, and executes them. Multiple comm
 
 **Total Changes**: 5 files, 56 insertions, 4 deletions
 
-## Usage
+## Installation
 
-### Enable ThingsBoard Mode
+### Option 1: Flash Minimal First (Recommended for devices with 1MB flash)
+1. Flash `tasmota-minimal.bin` to your device first
+2. Use the web UI to upgrade to `tasmota-thingsboard.bin.gz` via OTA
+
+### Option 2: Direct Flash (OTA For devices with 2MB+ flash, or for direct flash via serial)
+1. Flash `tasmota-thingsboard.bin.g` directly using esptool or Tasmota Web Installer
+
+**Download firmware:**
+- `tasmota-thingsboard.bin` (657KB)
+- `tasmota-thingsboard.bin.gz` (470KB) - compressed version for OTA updates
+
+## Configuration
+
+### Step 1: Enable ThingsBoard Mode
+
+**IMPORTANT:** You must enable SetOption166 via console AND restart the device for it to take effect.
+
 ```
 SetOption166 1
 ```
+Then restart:
 
-### Disable ThingsBoard Mode
+To disable ThingsBoard mode:
 ```
 SetOption166 0
+Restart 1
 ```
 
-Back to standard Tasmota MQTT. Because sometimes you need backward compatibility.
+### Step 2: Configure ThingsBoard Device Profile
+
+In your ThingsBoard instance, configure the device profile:
+
+**Transport Configuration:**
+- **Transport Type**: MQTT
+- **Telemetry topic filter**: `tele/tasmota`
+- **Attributes publish topic filter**: `stat/tasmota`
+- **Attributes subscribe topic filter**: `#`
+
+> **Note**: ThingsBoard still publishes to `v1/devices/me/attributes` regardless of the subscribe filter setting.
 
 ## Build Status
 
 ✅ **Compiles Successfully**
 - Firmware: 657 KB (65.3% flash)
+- Available as:
+  - `tasmota-thingsboard.bin` (657KB)
+  - `tasmota-thingsboard.bin.gz` (470KB)
 
 ## Session Statistics
 
-**Total Token Usage**: ~61,000+ tokens (and counting)
+**Total Token Usage**: ~66,000+ tokens (and counting)
 **Human Contribution**: Typing "implement the following plan" and "test the build"
 **AI Contribution**: Reading documentation, understanding Tasmota architecture, writing code, fixing compile errors, building firmware, creating documentation, and writing (most of) this README
 
@@ -75,13 +106,27 @@ Back to standard Tasmota MQTT. Because sometimes you need backward compatibility
 
 Because ThingsBoard is actually pretty great for IoT dashboards, but making Tasmota talk to it properly was unnecessarily painful.
 
-## Testing Recommendations
+## Testing
 
-1. Flash the firmware (see `.pio/build/tasmota/firmware.bin`)
-2. Configure MQTT to point to your ThingsBoard instance
-3. Enable SetOption166
-4. Send attributes from ThingsBoard dashboard
-5. Watch Tasmota respond like it was born to do this
+### Verify MQTT Publishing
+After enabling SetOption166 and restarting, check that:
+- Telemetry publishes to `tele/tasmota/` as JSON
+- Status messages publish to `stat/tasmota/` as JSON
+- No plain text messages (e.g., `ON`, `OFF`) appear
+
+### Test Command Processing
+From ThingsBoard, send a shared attribute update:
+```json
+{"POWER": "ON"}
+```
+
+The device should respond. Commands are case-insensitive (`power`, `Power`, `POWER` all work).
+
+### Multiple Commands
+You can send multiple commands in one payload:
+```json
+{"POWER": "ON", "Dimmer": 75}
+```
 
 ## Known Limitations
 
@@ -91,10 +136,10 @@ Because ThingsBoard is actually pretty great for IoT dashboards, but making Tasm
 
 ## Future Work
 
-- Test with real ThingsBoard instance (Claude can code but can't physically flash ESP8266 chips... yet)
-- Document any required rule modifications
-- Submit upstream to Tasmota (if they want ThingsBoard support)
-- Teach the human how to use git properly (lol, no.)
+- ~~Test with real ThingsBoard instance~~ ✅ Tested and working
+- Document any required rule modifications for existing Tasmota setups
+- Consider submitting upstream to Tasmota project
+- Add support for additional ThingsBoard features (RPC, client attributes, etc.)
 
 
 ## License
